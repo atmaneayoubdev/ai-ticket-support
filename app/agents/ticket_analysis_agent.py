@@ -1,50 +1,26 @@
-from typing import Optional
-from app.core.openai_utils import generate_response_with_gpt
-from app.models.analysis import TicketAnalysis, TicketCategory, Priority
+import re
+from typing import Optional, Dict, Any
+from app.models.analysis import TicketCategory, Priority, TicketAnalysis
 
 
 class TicketAnalysisAgent:
+    def __init__(self):
+        self.urgency_keywords = ["ASAP", "urgent",
+                                 "immediately", "critical", "high priority", "as soon as possible"]
+        self.high_priority_roles = ["Director", "C-level", "Manager", "Admin"]
+
     async def analyze_ticket(
         self,
         ticket_content: str,
-        customer_info: Optional[dict] = None
+        customer_info: Optional[Dict[str, Any]] = None
     ) -> TicketAnalysis:
-        """
-        Analyze a ticket to classify its category, assess its priority, and extract key points.
-
-        Requirements:
-        1. Identify ticket category based on content and subject.
-        2. Determine priority using urgency words, customer role, and business impact.
-        3. Extract key points from the ticket content.
-        """
-
-        # Use GPT to analyze the ticket content for more sophisticated insights
-        gpt_analysis_prompt = f"Analyze the following ticket and categorize it into one of the following categories: Technical Issue, Billing Question, Feature Request, Account Access. Also, assess the priority based on urgency, role, and business impact. Extract key points and suggest required expertise.\n\nTicket content: {ticket_content}"
-
-        gpt_analysis = generate_response_with_gpt(gpt_analysis_prompt)
-
-        # Parse GPT's response for further analysis (this could be extended as needed)
-        if "Technical Issue" in gpt_analysis:
-            category = TicketCategory.TECHNICAL
-        elif "Billing Question" in gpt_analysis:
-            category = TicketCategory.BILLING
-        elif "Feature Request" in gpt_analysis:
-            category = TicketCategory.FEATURE
-        else:
-            category = TicketCategory.ACCESS
-
-        # Dummy priority based on GPT response (you can refine this logic)
-        priority = Priority.URGENT if "ASAP" in ticket_content else Priority.MEDIUM
-
-        # You can refine further based on GPT response
-        key_points = ["Key point identified by GPT"]
-        required_expertise = [
-            "Technical Support"] if category == TicketCategory.TECHNICAL else ["Billing Support"]
-
-        sentiment = 0.85  # Dummy sentiment score
-        urgency_indicators = ["ASAP"] if "ASAP" in ticket_content else []
-        business_impact = "High"  # Example impact, could be extended based on content
-        suggested_response_type = "access_issue" if category == TicketCategory.ACCESS else "billing_inquiry"
+        category = self.classify_ticket(ticket_content)
+        priority, urgency_indicators, business_impact = self.assess_priority(
+            ticket_content, customer_info)
+        key_points = self.extract_key_points(ticket_content)
+        sentiment = self.analyze_sentiment(ticket_content)
+        required_expertise = self.determine_expertise(category)
+        suggested_response_type = "detailed" if priority.value >= Priority.HIGH.value else "standard"
 
         return TicketAnalysis(
             category=category,
@@ -56,3 +32,64 @@ class TicketAnalysisAgent:
             business_impact=business_impact,
             suggested_response_type=suggested_response_type
         )
+
+    def classify_ticket(self, ticket_content: str) -> TicketCategory:
+        content = ticket_content.lower()
+
+        if "billing" in content or "invoice" in content:
+            return TicketCategory.BILLING
+        if "feature request" in content or "new feature" in content:
+            return TicketCategory.FEATURE
+        if any(keyword in content for keyword in ["log in", "account access", "dashboard", "403 error"]):
+            return TicketCategory.ACCESS
+        return TicketCategory.TECHNICAL
+
+    # type: ignore
+    def assess_priority(self, content: str, customer_info: Optional[Dict[str, Any]]) -> (Priority, list, str):
+        """Determines priority based on urgency and customer role."""
+        urgency_indicators = [
+            word for word in self.urgency_keywords if word.lower() in content.lower()]
+        business_impact = "Normal"
+
+        priority = Priority.LOW  # Default priority
+        # Ensure billing-related tickets get MEDIUM priority, but only if no other overriding conditions
+        if any(keyword in content.lower() for keyword in ["billing", "invoice"]):
+            priority = Priority.MEDIUM
+            business_impact = "Billing issue"
+        elif "payroll" in content.lower():
+            priority = Priority.URGENT
+            business_impact = "Payroll issue"
+
+        # Check for urgency based on keywords
+        if urgency_indicators:
+            priority = Priority.URGENT
+
+        # Check for high-priority roles that should escalate the priority
+        if customer_info and customer_info.get("role") in self.high_priority_roles:
+            if "ASAP" in urgency_indicators:
+                # Ensure that urgent role-based tickets are handled with highest priority
+                priority = Priority.URGENT
+            else:
+                priority = Priority.HIGH  # Other high-priority roles, even without urgency indicators
+
+        return priority, urgency_indicators, business_impact
+
+    def extract_key_points(self, content: str) -> list:
+        """Extracts key points from the ticket."""
+        sentences = [s.strip() for s in content.split("\n") if s.strip()]
+        return sentences[:3]  # First 3 lines as key points
+
+    def analyze_sentiment(self, content: str) -> float:
+        """Simple sentiment analysis (placeholder)."""
+        negative_words = ["frustrated", "angry", "unacceptable"]
+        return -1.0 if any(word in content.lower() for word in negative_words) else 1.0
+
+    def determine_expertise(self, category: TicketCategory) -> list:
+        """Determines required expertise for the ticket."""
+        expertise_map = {
+            TicketCategory.TECHNICAL: ["Support Engineer"],
+            TicketCategory.BILLING: ["Billing Specialist"],
+            TicketCategory.FEATURE: ["Product Manager"],
+            TicketCategory.ACCESS: ["IT Support"]
+        }
+        return expertise_map.get(category, ["General Support"])

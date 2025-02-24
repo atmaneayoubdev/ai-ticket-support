@@ -2,14 +2,10 @@ from pydantic import BaseModel
 from typing import Optional
 
 
-class CustomerInfo(BaseModel):
-    role: str
-    plan: str
-    company_size: str
-
-
-class Ticket(BaseModel):
+class SupportTicket(BaseModel):
     id: str
     subject: str
-    content: str
-    customer_info: CustomerInfo
+    description: str
+    user_id: str
+    # You can adjust this based on actual data
+    created_at: Optional[str] = None

@@ -1,5 +1,6 @@
+from typing import List, Optional
 from pydantic import BaseModel
-from typing import List
+from app.models.analysis import TicketAnalysis
 
 
 class ResponseSuggestion(BaseModel):
@@ -7,3 +8,10 @@ class ResponseSuggestion(BaseModel):
     confidence_score: float
     requires_approval: bool
     suggested_actions: List[str]
+
+
+class TicketResolution(BaseModel):
+    ticket_id: str
+    analysis: Optional[TicketAnalysis]
+    response: Optional[ResponseSuggestion]
+    error: Optional[str] = None

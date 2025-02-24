@@ -3,14 +3,14 @@ from enum import Enum
 from typing import List
 
 
-class TicketCategory(str, Enum):
+class TicketCategory(Enum):
     TECHNICAL = "technical"
     BILLING = "billing"
     FEATURE = "feature"
     ACCESS = "access"
 
 
-class Priority(int, Enum):
+class Priority(Enum):
     LOW = 1
     MEDIUM = 2
     HIGH = 3
